@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive English Flashcards - Ecuador Kids</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2e59ff;
+            --secondary: #f8f9fc;
+            --accent: #1cc88a;
+        }
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #e3e6f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        #game-container {
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+        }
+        .flashcard {
+            width: 100%;
+            height: 450px;
+            perspective: 1000px;
+            cursor: pointer;
+            position: relative;
+        }
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border-radius: 20px;
+        }
+        .flashcard.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 20px;
+            background: white;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .card-back {
+            transform: rotateY(180deg);
+            background-color: var(--secondary);
+        }
+        img {
+            width: 100%;
+            height: 250px;
+            object-fit: cover;
+            border-radius: 15px;
+            margin-bottom: 15px;
+        }
+        .phrase { font-size: 1.4rem; font-weight: bold; color: #333; }
+        .translation { font-size: 1.4rem; color: var(--primary); font-weight: bold; }
+        
+        .controls { margin-top: 30px; }
+        button {
+            padding: 15px 40px;
+            font-size: 1.1rem;
+            border: none;
+            border-radius: 50px;
+            background: var(--primary);
+            color: white;
+            cursor: pointer;
+            transition: 0.3s;
+            display: none;
+        }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        
+        #final-screen { display: none; background: white; padding: 40px; border-radius: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        #participants-list { text-align: left; margin-top: 20px; max-height: 200px; overflow-y: auto; }
+        input { padding: 10px; border-radius: 5px; border: 1px solid #ddd; width: 80%; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="flashcard-area">
+        <div class="flashcard" id="card" onclick="flipCard()">
+            <div class="card-inner" id="inner">
+                <div class="card-front">
+                    <img id="card-img" src="" alt="Vocabulary Image">
+                    <div class="phrase" id="eng-text"></div>
+                    <p style="color: #666; font-size: 0.8rem;">Click para voltear</p>
+                </div>
+                <div class="card-back">
+                    <div class="translation" id="esp-text"></div>
+                    <p style="color: #666; font-size: 0.8rem;">Click para volver</p>
+                </div>
+            </div>
+        </div>
+        <div class="controls">
+            <button id="next-btn" onclick="nextCard()">Siguiente →</button>
+        </div>
+    </div>
+
+    <div id="final-screen">
+        <h1 style="color: #e74a3b;">GAME OVER</h1>
+        <p>¡Increíble trabajo! Ingresa tu nombre para el registro:</p>
+        <input type="text" id="user-name" placeholder="Tu nombre...">
+        <button id="save-btn" style="display: inline-block;" onclick="saveUser()">Guardar y Ver Lista</button>
+        <div id="participants-list">
+            <h3>Participantes:</h3>
+            <ul id="list-items"></ul>
+        </div>
+    </div>
+</div>
+
+<script>
+    const vocabulary = [
+        { eng: "She is a singer", esp: "Ella es una cantante", img: "https://images.unsplash.com/photo-1525362035658-c130509747d2?auto=format&fit=crop&w=500" },
+        { eng: "She sings pop music", esp: "Ella canta música pop", img: "https://images.unsplash.com/photo-1514525253361-bee8718a74a2?auto=format&fit=crop&w=500" },
+        { eng: "She enjoys singing", esp: "Ella disfruta cantar", img: "https://images.unsplash.com/photo-1493225255756-d9584f8606e9?auto=format&fit=crop&w=500" },
+        { eng: "She is an actress", esp: "Ella es una actriz", img: "https://images.unsplash.com/photo-1508853713141-1ca1589cfa74?auto=format&fit=crop&w=500" },
+        { eng: "She likes acting in soap operas", esp: "A ella le gusta actuar en telenovelas", img: "https://images.unsplash.com/photo-1522860655093-50c97a709a96?auto=format&fit=crop&w=500" },
+        { eng: "They love art", esp: "A ellos les encanta el arte", img: "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?auto=format&fit=crop&w=500" },
+        { eng: "He doesn't like acting", esp: "A él no le gusta actuar", img: "https://images.unsplash.com/photo-1541173104332-60477e7790b5?auto=format&fit=crop&w=500" },
+        { eng: "He doesn't like singing", esp: "A él no le gusta cantar", img: "https://images.unsplash.com/photo-1459749411177-042180ce673c?auto=format&fit=crop&w=500" },
+        { eng: "They hate eating junk food", esp: "Ellos odian comer comida chatarra", img: "https://images.unsplash.com/photo-1534422298391-e4f8c170db0f?auto=format&fit=crop&w=500" },
+        { eng: "They are careful with their health and figure", esp: "Ellos cuidan su salud y su figura", img: "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=500" },
+        { eng: "They prefer eating healthy", esp: "Ellos prefieren comer saludable", img: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=500" },
+        { eng: "I love playing the guitar", esp: "Yo amo tocar la guitarra", img: "https://images.unsplash.com/photo-1510915228340-29c85a43dcfe?auto=format&fit=crop&w=500" },
+        { eng: "I enjoy playing heavy metal music", esp: "Yo disfruto tocar música heavy metal", img: "https://images.unsplash.com/photo-1511735111819-9a3f7709049c?auto=format&fit=crop&w=500" },
+        { eng: "I hate people throwing things to the stage", esp: "Odio que la gente lance cosas al escenario", img: "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=500" },
+        { eng: "I like when they dance", esp: "Me gusta cuando ellos bailan", img: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&w=500" },
+        { eng: "Going shopping", esp: "Ir de compras", img: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=500" },
+        { eng: "Going to the gym", esp: "Ir al gimnasio", img: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=500" },
+        { eng: "Watching movies", esp: "Ver películas", img: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=500" },
+        { eng: "Visiting museums", esp: "Visitar museos", img: "https://images.unsplash.com/photo-1518998053574-53f1f61f9b8d?auto=format&fit=crop&w=500" },
+        { eng: "Leisure activities", esp: "Actividades de tiempo libre", img: "https://images.unsplash.com/photo-1502086223501-7ea6ecd79368?auto=format&fit=crop&w=500" }
+    ];
+
+    let currentIndex = 0;
+    let flipped = false;
+
+    const engText = document.getElementById('eng-text');
+    const espText = document.getElementById('esp-text');
+    const cardImg = document.getElementById('card-img');
+    const nextBtn = document.getElementById('next-btn');
+
+    function loadCard() {
+        const item = vocabulary[currentIndex];
+        engText.innerText = item.eng;
+        espText.innerText = item.esp;
+        cardImg.src = item.img;
+        nextBtn.style.display = 'none';
+        flipped = false;
+        document.getElementById('card').classList.remove('flipped');
+        speak(item.eng, 'en-US');
+    }
+
+    function flipCard() {
+        const card = document.getElementById('card');
+        card.classList.toggle('flipped');
+        flipped = !flipped;
+        
+        if(flipped) {
+            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+            nextBtn.style.display = 'inline-block';
+            speak(vocabulary[currentIndex].esp, 'es-MX');
+        } else {
+            speak(vocabulary[currentIndex].eng, 'en-US');
+        }
+    }
+
+    function speak(text, lang) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang;
+        utterance.rate = 0.9;
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function nextCard() {
+        currentIndex++;
+        if (currentIndex < vocabulary.length) {
+            loadCard();
+        } else {
+            document.getElementById('flashcard-area').style.display = 'none';
+            document.getElementById('final-screen').style.display = 'block';
+            showList();
+        }
+    }
+
+    function saveUser() {
+        const name = document.getElementById('user-name').value;
+        if(name) {
+            let players = JSON.parse(localStorage.getItem('players') || "[]");
+            players.push(name);
+            localStorage.setItem('players', JSON.stringify(players));
+            document.getElementById('user-name').value = '';
+            showList();
+        }
+    }
+
+    function showList() {
+        const list = document.getElementById('list-items');
+        list.innerHTML = '';
+        let players = JSON.parse(localStorage.getItem('players') || "[]");
+        players.forEach(p => {
+            const li = document.createElement('li');
+            li.textContent = p;
+            list.appendChild(li);
+        });
+    }
+
+    // Inicializar
+    loadCard();
+</script>
+</body>
+</html>
